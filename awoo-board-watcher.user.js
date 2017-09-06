@@ -8,7 +8,7 @@
 // @include 	https://www.dangeru.us/*
 // @include 	http://boards.dangeru.us/*
 // @include 	https://boards.dangeru.us/*
-// @version		1.01
+// @version		1.02
 // @grant 		GM_getValue
 // @grant 		GM_setValue
 // @run-at 		document-end
