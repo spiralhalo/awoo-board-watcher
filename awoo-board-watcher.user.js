@@ -68,7 +68,7 @@ var doTheThing = function (a) {
 	    	doTheAsyncThing(a, elem, board, this.responseText);
 			// if not all boards are updated, update on the next page load
 			if(updated < 1){
-				GM_setValue("time", new Date().getTime(););
+				GM_setValue("time", new Date().getTime());
 			}
 	    }
 	};
