@@ -8,13 +8,14 @@
 // @include 	https://www.dangeru.us/*
 // @include 	http://boards.dangeru.us/*
 // @include 	https://boards.dangeru.us/*
-// @version		1.0
+// @version		1.01
 // @grant 		GM_getValue
 // @grant 		GM_setValue
 // @run-at 		document-end
 // ==/UserScript==
 var started = false;
 var page = 1;
+var updated = 0;
 var onload = function() {
 
 	// Only start once
@@ -33,7 +34,6 @@ var onload = function() {
 	//only do this every 1 minute to avoid overloading the api
 	if (time - lasttime >= 60000) {
 		console.log("updating board watcher");
-		GM_setValue("time", time);
 		Array.prototype.slice.call(boardas, 0).forEach(doTheThing);
 	} else {
 		Array.prototype.slice.call(boardas, 0).forEach(doTheMinimalThing);
@@ -64,10 +64,16 @@ var doTheThing = function (a) {
 	var xhr = new XMLHttpRequest();
 	xhr.onreadystatechange = function() {
 	    if (this.readyState == 4 && this.status == 200) {
+			updated --;
 	    	doTheAsyncThing(a, elem, board, this.responseText);
+			// if not all boards are updated, update on the next page load
+			if(updated < 1){
+				GM_setValue("time", new Date().getTime(););
+			}
 	    }
 	};
 	xhr.open("GET", url + "/board/" + board, true);
+	updated ++;
 	xhr.send();
 };
 
