@@ -1,13 +1,14 @@
 // ==UserScript==
-// @name 		awoo catalog
-// @namespace 	https://niles.xyz
+// @name 		awoo board watcher
 // @include 	http://boards.lolis.download/*
 // @include 	https://niles.lain.city/*
 // @include 	http://dangeru.us/*
 // @include 	https://dangeru.us/*
+// @include 	http://www.dangeru.us/*
+// @include 	https://www.dangeru.us/*
 // @include 	http://boards.dangeru.us/*
 // @include 	https://boards.dangeru.us/*
-// @version		1.1
+// @version		1.0
 // @grant 		GM_getValue
 // @grant 		GM_setValue
 // @run-at 		document-end
@@ -21,98 +22,106 @@ var onload = function() {
 		return;
 	}
 	started = true;
-	page_count_container = document.getElementById("pagecount_container");
-	/*
-	if (document.getElementById("load_next_button") === null) {
-		var btn = document.createElement("button");
-		btn.id = "load_next_button";
-		btn.innerText = "load page " + (page + 1);
-		btn.addEventListener("click", function() {
-			var href = document.location.href;
-			if (href[href.length - 1] == "/") href = href.substr(0, href.length - 1);
-			var board = href.substr(href.lastIndexOf("/") + 1);
-			var url = document.location.href + "?page=" + page.toString();
-			page++;
-			btn.innerText = "load page " + (page + 1);
-			var xhr = new XMLHttpRequest();
-			xhr.onreadystatechange = function() {
-				var done = this.DONE || 4;
-				if (this.readyState === done) {
-					var parser = new DOMParser();
-					var doc = parser.parseFromString(xhr.responseText, "text/html");
-					var are_we_there_yet = false;
-					Array.prototype.slice.call(doc.getElementById("sitecorner").children, 0).forEach(function(elem) {
-						if (!are_we_there_yet) {
-							are_we_there_yet = elem.tagName == "HR";
-						} else {
-							if (elem.id = "pagecount_container") {
-								are_we_there_yet = false;
-								return;
-							}
-							document.getElementById("sitecorner").insertBefore(elem, page_count_container);
-							if (elem.hasAttribute("data-replies")) {
-								doTheThing(elem);
-							}
-						}
-					});
-				}
-			};
-			xhr.open("GET", url);
-			xhr.send();
-		});
-		page_count_container.appendChild(document.createElement("br"));
-		page_count_container.appendChild(btn);
-	}
-	*/
 
-	Array.prototype.slice.call(document.getElementsByTagName("a"), 0).forEach(doTheThing);
+	var time = new Date().getTime();
+	var lasttime = GM_getValue("time", -1);
+	var boardas = document.getElementsByClassName("boarda");
+
+	//don't update timer on thread pages
+	if(boardas.length < 1) return;
+
+	//only do this every 1 minute to avoid overloading the api
+	if (time - lasttime >= 60000) {
+		console.log("updating board watcher");
+		GM_setValue("time", time);
+		Array.prototype.slice.call(boardas, 0).forEach(doTheThing);
+	} else {
+		Array.prototype.slice.call(boardas, 0).forEach(doTheMinimalThing);
+	}
 };
-var doTheThing = function doTheThing(a) {
-	if (!a.hasAttribute("data-replies")) {
-		return;
-	}
 
+var doTheMinimalThing = function (a) {
 	var board = a.href.split("/")[3];
-	var id = a.href.split("/")[5];
 
 	var elem = document.createElement("span");
 	a.appendChild(elem);
-	elem.innerHTML = "Loading...";
 
-	var key = board + ":" + id;
-	var oldreplies = GM_getValue(key, 0);
-	var replies = Number(a.getAttribute("data-replies"));
-	comparison_and_update_elem(key, replies, a, elem, closed, oldreplies);
+	var thread = GM_getValue(board+"t_new", -1);
+	var replies = GM_getValue(board+"r_new", 0);
+	comparison_and_update_elem(board, thread, replies, a, elem, true);
 };
 
-var grey = function grey(text) {
-	return color("grey", text);
+var doTheThing = function (a) {
+	var url_ = a.href.split("/");
+	var board = url_[3];
+	var url = url_[0] + "//" + url_[2] + "/api/v2";
+
+	var elem = document.createElement("span");
+	a.appendChild(elem);
+	elem.innerHTML = grey("?");
+
+	// unlike awoo-catalog, this one uses and may overload the api?
+	var xhr = new XMLHttpRequest();
+	xhr.onreadystatechange = function() {
+	    if (this.readyState == 4 && this.status == 200) {
+	    	doTheAsyncThing(a, elem, board, this.responseText);
+	    }
+	};
+	xhr.open("GET", url + "/board/" + board, true);
+	xhr.send();
 };
-var red = function red(text) {
+
+var doTheAsyncThing = function (a, elem, board, response){
+	var json = JSON.parse(response);
+	var id = 0;
+
+	// sticky threads are unsupported. use thread watcher on app
+	if (json === null) return update_and_cache_status(board, elem, grey("-"));
+	while (id < json.length && json[id].sticky) id ++;
+	if (id >= json.length) return update_and_cache_status(board, elem, grey("-"));
+
+	var thread = json[id].post_id;
+	var replies = json[id].number_of_replies;
+	comparison_and_update_elem(board, thread, replies, a, elem);
+};
+
+var grey = function (text) {
+	return color("gray", text);
+};
+var red = function (text) {
 	return color("red", text);
 };
-var color = function color(c, text) {
+var color = function (c, text) {
 	return " <span style='color: " + c + ";'>" + text + "</span>";
 };
 
-var comparison_and_update_elem = function(key, replies, a, elem, closed, oldreplies) {
-	if (oldreplies < replies) {
-		elem.innerHTML = red("+" + (replies - oldreplies));
+var comparison_and_update_elem = function(board, thread, replies, a, elem, offline=false) {
+	var oldthread = GM_getValue(board+"t", -1);
+	var oldreplies = GM_getValue(board+"r", 0);
+	if (oldthread != thread){
+		if(!offline){
+			GM_setValue(board+"t_new", thread);
+			GM_setValue(board+"r_new", replies);
+		}
+    	elem.innerHTML = red("!");
+    	set_onclick_listener(board, a, elem);
+	} else if (oldreplies < replies) {
+		if(!offline) GM_setValue(board+"r_new", replies);
+    	elem.innerHTML = red("+");
+    	set_onclick_listener(board, a, elem);
 		// we have to wrap this in a closure because otherwise it clicking any post would only update the last post processed in this loop
-		set_onclick_listener(key, replies, a, elem, closed);
 	} else {
-		elem.innerHTML = grey(replies);
+    	elem.innerHTML = grey("-");
 	}
 };
 
-var set_onclick_listener = function set_onclick_listener(key, replies, a, elem, closed) {
-	console.log(key);
+var set_onclick_listener = function (board, a, elem) {
 	a.addEventListener("click", function() {
-		GM_setValue(key, replies);
-		elem.innerHTML = grey(replies);
+		GM_setValue(board+"t", GM_getValue(board+"t_new", -1));
+		GM_setValue(board+"r", GM_getValue(board+"r_new", 0));
+    	elem.innerHTML = grey("-");
 	});
 };
-
 
 // In chrome, the userscript runs in a sandbox, and will never see these events
 // Hence the run-at document-end
